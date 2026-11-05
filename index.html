@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>FITNESS 健身打卡</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background-color: #f4f6f9;
+    background-image: 
+      linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+    background-size: 24px 24px;
+    color: #1f2937; 
+    /* 默认手机端内边距 */
+    padding: 16px;
+  }
+
+  /* 电脑端内边距变大 */
+  @media (min-width: 768px) {
+    body { padding: 32px 24px; }
+  }
+
+  .app { max-width: 960px; margin: 0 auto; }
+  
+  /* 卡片基础样式 */
+  .card { 
+    background: #fff; border-radius: 16px; padding: 16px; 
+    box-shadow: 0 4px 18px rgba(15,23,42,.04); border: 1px solid #e5e7eb; 
+    margin-bottom: 16px; position: relative; overflow: hidden; 
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+  }
+
+  @media (min-width: 768px) {
+    .card { padding: 24px; border-radius: 20px; }
+    .card:hover { box-shadow: 0 8px 24px rgba(15,23,42,.08); transform: translateY(-2px); }
+  }
+
+  /* Toast */
+  .toast-container {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none;
+    width: 90%; max-width: 400px;
+  }
+  .toast {
+    background: #111827; color: #fff; padding: 12px 20px; border-radius: 12px;
+    font-size: 14px; font-weight: 700; box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; transform: translateY(-20px);
+    animation: toastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    position: relative; overflow: hidden;
+  }
+  .toast::after {
+    content: ''; position: absolute; left: 0; bottom: 0; height: 3px; background: rgba(255,255,255,0.2);
+    width: 100%; animation: toastTimer 2.5s linear forwards;
+  }
+  .toast.success { background: #f97316; }
+  .toast.danger { background: #ef4444; }
+  @keyframes toastIn { to { opacity: 1; transform: translateY(0); } }
+  @keyframes toastTimer { to { width: 0%; } }
+
+  /* 头部布局 */
+  header { 
+    margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end; 
+    gap: 12px; flex-wrap: wrap; 
+  }
+  @media (min-width: 768px) {
+    header { margin-bottom: 24px; }
+  }
+
+  .brand { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .brand-box {
+    background: #111827; color: #fff; font-weight: 900; font-style: italic;
+    padding: 4px 10px; border-radius: 6px; letter-spacing: 1px;
+    transform: skewX(-8deg); font-size: 16px;
+  }
+  .brand span { font-size: 20px; font-weight: 900; color: #111827; }
+  .date { color: #6b7280; font-size: 12px; font-weight: 500; }
+  
+  .clock { 
+    background: #fff; padding: 8px 14px; border-radius: 12px; 
+    box-shadow: 0 2px 8px rgba(15,23,42,.06); border: 1px solid #e5e7eb; 
+    text-align: right; font-variant-numeric: tabular-nums; 
+  }
+  .clock .big { font-size: 20px; font-weight: 900; color: #111827; }
+  .clock .small { font-size: 11px; color: #6b7280; font-weight: 600; margin-top: 2px;}
+
+  /* ====== 核心响应式布局 ====== */
+  .grid { 
+    display: grid; 
+    grid-template-columns: 1fr; /* 手机端单列 */
+    gap: 16px; 
+  }
+  @media (min-width: 768px) {
+    .grid { 
+      grid-template-columns: 1.2fr 0.8fr; /* 电脑端双列 */
+      gap: 24px; 
+    }
+  }
+  
+  /* 目标栏 */
+  .goal-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; font-size: 13px; color: #4b5563; font-weight: 600; }
+  .goal-row strong { color: #111827; font-size: 20px; font-style: italic; font-weight: 900; }
+  .bar { height: 16px; background: #e5e7eb; border-radius: 999px; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,.05); }
+  
+  @keyframes barMove { from { background-position: 0 0; } to { background-position: 24px 0; } }
+  .bar-inner {
+    height: 100%; width: 0%; background-color: #f97316;
+    background-image: repeating-linear-gradient(-45deg, transparent, transparent 8px, rgba(255,255,255,0.25) 8px, rgba(255,255,255,0.25) 16px);
+    animation: barMove 1s linear infinite; transition: width .4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  /* 表单 */
+  label { display: block; font-size: 13px; color: #4b5563; margin-bottom: 6px; font-weight: 700; }
+  input, select { 
+    width: 100%; border: 2px solid #e5e7eb; border-radius: 10px; padding: 12px; 
+    font-size: 16px; /* 防 iOS 放大 */
+    outline: none; background: #f9fafb; font-family: inherit; 
+    font-weight: 600; color: #111827; transition: border-color .2s, background .2s, box-shadow .2s; 
+  }
+  @media (min-width: 768px) {
+    input, select { font-size: 14px; padding: 10px 12px; }
+  }
+  input:focus, select:focus { border-color: #f97316; background: #fff; box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.15); }
+  
+  .form-row { margin-bottom: 12px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .hint { font-size: 11px; color: #9ca3af; margin-top: -4px; margin-bottom: 12px; }
+  
+  /* 按钮 */
+  button { border: 0; font-family: inherit; cursor: pointer; }
+  .btn-primary { 
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    color: #fff; width: 100%; border-radius: 12px;
+    height: 50px; font-size: 16px; font-weight: 900; font-style: italic; letter-spacing: 1px;
+    box-shadow: 0 4px 0 #9a3412, 0 8px 16px rgba(249, 115, 22, 0.3); 
+    transform: translateY(0); transition: all 0.1s;
+  }
+  .btn-primary:active { transform: translateY(4px); box-shadow: 0 0 0 #9a3412, 0 2px 8px rgba(249, 115, 22, 0.2); }
+  
+  .quick-minutes { display: flex; gap: 8px; margin-bottom: 8px; }
+  .btn-quick {
+    flex: 1; background: #fff; color: #ea580c; border: 2px solid #f97316;
+    border-radius: 50px; font-size: 14px; font-weight: 900; padding: 8px 0;
+    box-shadow: inset 0 0 0 3px #fff, 0 2px 4px rgba(0,0,0,0.05);
+    transition: all .2s;
+  }
+  .btn-quick.active { background: #f97316; color: #fff; box-shadow: inset 0 0 0 3px #f97316; transform: scale(0.95); }
+
+  .btn-del { background: transparent; color: #ef4444; padding: 6px 10px; font-size: 13px; font-weight: 700; border: 1px solid #fca5a5; border-radius: 6px; transition: all .2s; }
+  
+  /* 列表动画 */
+  @keyframes recordIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .record {
+    display: flex; justify-content: space-between; align-items: center; padding: 12px 0;
+    border-bottom: 1px dashed #e5e7eb; font-size: 14px;
+    animation: recordIn 0.3s ease forwards;
+  }
+  .record:last-of-type { border-bottom: 0; }
+  .record.is-deleting {
+    opacity: 0; transform: translateX(30px); border-bottom-color: transparent;
+    transition: all 0.3s ease;
+  }
+  .record .meta { color: #6b7280; font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; font-weight: 500; }
+  .record .mins { font-weight: 900; color: #ea580c; font-style: italic; }
+  
+  /* 空状态 */
+  .empty-workout {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%; min-height: 240px; color: #9ca3af;
+  }
+  .dumbbell-icon {
+    position: relative; width: 60px; height: 30px; margin-bottom: 16px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .dumbbell-icon::before { content: ''; width: 100%; height: 6px; background: #e5e7eb; border-radius: 4px; }
+  .dumbbell-icon::after { content: ''; position: absolute; left: 0; top: 2px; width: 10px; height: 26px; background: #d1d5db; border-radius: 4px; box-shadow: 50px 0 0 #d1d5db; }
+  .empty-title { font-size: 14px; font-weight: 800; margin-bottom: 6px; color: #6b7280; }
+  .empty-sub { font-size: 12px; font-weight: 900; letter-spacing: 2px; color: #cbd5e1; font-style: italic; }
+  
+  .motivational-quote {
+    margin-top: 20px; padding-top: 16px; border-top: 1px dashed #e5e7eb;
+    font-size: 13px; font-weight: 700; color: #6b7280; line-height: 1.6; text-align: center; font-style: italic;
+  }
+  .motivational-quote i { display: block; font-size: 10px; color: #9ca3af; margin-top: 8px; text-transform: uppercase; letter-spacing: 2px; font-style: normal; font-weight: 800; }
+
+  /* 数据仪表盘 */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+  .stat { 
+    background: #fff; border-radius: 12px; padding: 14px; border: 1px solid #e5e7eb; 
+    position: relative; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+  }
+  .stat::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #f97316; }
+  .stat:nth-child(2)::before { background: #f59e0b; }
+  .stat:nth-child(3)::before { background: #3b82f6; }
+  .stat:nth-child(4)::before { background: #14b8a6; }
+  .stat:nth-child(5)::before { background: #ec4899; }
+  .stat .num { font-size: 24px; font-weight: 900; color: #111827; font-style: italic; }
+  .stat .num.time { font-size: 14px; font-variant-numeric: tabular-nums; font-style: normal; font-weight: 800; }
+  .stat .label { font-size: 11px; color: #6b7280; margin-top: 4px; font-weight: 700; }
+
+  /* 头部按钮 */
+  h2 { font-size: 16px; font-weight: 900; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; color: #111827; }
+  h2 .count { font-size: 12px; color: #6b7280; font-weight: 600; }
+  
+  .sync-btns { display: flex; gap: 6px; }
+  .btn-sync {
+    background: #fff; color: #4b5563; border: 1px solid #d1d5db;
+    padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 700;
+    transition: all .2s;
+  }
+  .btn-sync:active { background: #f3f4f6; }
+
+  .history-day { margin-bottom: 14px; }
+  .history-title { font-size: 13px; color: #111827; font-weight: 800; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .history-title span.time-sum { color: #6b7280; font-weight: 600; margin-left: 4px; font-size: 12px; }
+  .storage-warn { display: none; background: #fffbeb; color: #b45309; border: 1px solid #fcd34d; padding: 10px; border-radius: 8px; font-size: 12px; margin-bottom: 16px; font-weight: 600; }
+
+  /* ====== 周计划响应式 ====== */
+  .plan-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; font-size: 11px; color: #374151; font-weight: 600; }
+  .plan-summary .pill { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 999px; background: #f3f4f6; border: 1px solid #e5e7eb; }
+  .plan-summary .pill b { color: #111827; font-weight: 900; font-size: 12px; }
+
+  /* 手机端：2列网格。电脑端：7列网格 */
+  .plan-grid { 
+    display: grid; 
+    grid-template-columns: repeat(2, 1fr); 
+    gap: 10px; 
+  }
+  @media (min-width: 768px) {
+    .plan-grid { grid-template-columns: repeat(7, 1fr); gap: 8px; }
+  }
+
+  .plan-day {
+    position: relative; border: 2px solid #e5e7eb; border-radius: 12px;
+    padding: 12px 6px; background: #f9fafb; text-align: center;
+    transition: background .2s, border-color .2s, box-shadow .2s;
+    border-top-width: 5px;
+  }
+  .plan-day[data-type="train"] { background: #fff7ed; border-color: #fdba74; border-top-color: #f97316; }
+  .plan-day[data-type="rest"]  { background: #eff6ff; border-color: #93c5fd; border-top-color: #3b82f6; }
+  .plan-day[data-type="other"] { background: #f0fdfa; border-color: #99f6e4; border-top-color: #14b8a6; }
+  .plan-day[data-type="none"], .plan-day[data-type=""] { background: #f9fafb; border-color: #e5e7eb; border-top-color: #d1d5db; }
+  .plan-day.today { box-shadow: 0 0 0 2px #f97316; }
+
+  .badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 30px; height: 24px; padding: 0 4px; border-radius: 6px;
+    font-size: 12px; font-weight: 900; margin-bottom: 6px; font-style: italic;
+    border: 1px solid transparent; transition: background .3s, color .3s;
+  }
+  .plan-day[data-type="train"] .badge { background: #ffedd5; border-color: #fdba74; color: #9a3412; }
+  .plan-day[data-type="rest"]  .badge { background: #dbeafe; border-color: #93c5fd; color: #1e40af; }
+  .plan-day[data-type="other"] .badge { background: #ccfbf1; border-color: #5eead4; color: #0f766e; }
+  .plan-day[data-type="none"] .badge, .plan-day[data-type=""] .badge { background: #f3f4f6; border-color: #d1d5db; color: #4b5563; }
+
+  .plan-day .dow { display: flex; justify-content: center; align-items: center; gap: 4px; font-size: 12px; font-weight: 800; color: #374151; margin-bottom: 6px; }
+  .plan-day[data-type="train"] .dow { color: #9a3412; }
+  .plan-day[data-type="rest"]  .dow { color: #1e40af; }
+  .plan-day[data-type="other"] .dow { color: #0f766e; }
+  .plan-day .today-tag { display: inline-block; background: #f97316; color: #fff; font-size: 9px; font-weight: 800; padding: 1px 4px; border-radius: 999px; margin-left: 2px; }
+
+  .plan-day select { padding: 6px 2px; font-size: 12px; text-align: center; font-weight: 800; cursor: pointer; border-radius: 6px; }
+  .plan-day[data-type="train"] select { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
+  .plan-day[data-type="rest"]  select { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+  .plan-day[data-type="other"] select { background: #ccfbf1; color: #0f766e; border-color: #5eead4; }
+  .plan-day[data-type="none"] select { color: #374151; }
+
+  .plan-day .note-input { margin-top: 6px; padding: 4px; font-size: 11px; text-align: center; border-radius: 6px; font-weight: 600; }
+  .plan-day[data-type="train"] .note-input { background: #fffbf5; border-color: #fed7aa; }
+  .plan-day[data-type="rest"]  .note-input { background: #f8fbff; border-color: #bfdbfe; }
+  .plan-day[data-type="other"] .note-input { background: #f0fdfa; border-color: #99f6e4; }
+
+  .plan-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: #4b5563; margin-top: 12px; align-items: center; font-weight: 600; }
+  .plan-legend .item { display: inline-flex; align-items: center; gap: 4px; }
+  .legend-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; padding: 0 4px; border-radius: 4px; font-size: 10px; font-weight: 900; border: 1px solid transparent; font-style: italic;
+  }
+  .legend-badge.train { background: #ffedd5; border-color: #fdba74; color: #9a3412; }
+  .legend-badge.rest  { background: #dbeafe; border-color: #93c5fd; color: #1e40af; }
+  .legend-badge.other { background: #ccfbf1; border-color: #5eead4; color: #0f766e; }
+  .legend-badge.none  { background: #f3f4f6; border-color: #d1d5db; color: #4b5563; }
+
+  .plan-hint { display: none; margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.5; font-weight: 600; border-left: 5px solid transparent; }
+  .plan-hint.type-train { background: #fff7ed; border-left-color: #f97316; color: #9a3412; }
+  .plan-hint.type-rest  { background: #eff6ff; border-left-color: #3b82f6; color: #1e40af; }
+  .plan-hint.type-other { background: #f0fdfa; border-left-color: #14b8a6; color: #0f766e; }
+
+  /* 弹窗 */
+  .modal-overlay {
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 16px;
+  }
+  .modal-content {
+    background: #fff; border-radius: 16px; padding: 20px; width: 100%; max-width: 400px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+  }
+  .modal-content h3 { font-size: 16px; font-weight: 900; margin-bottom: 12px; color: #111827; }
+  .modal-content textarea {
+    width: 100%; height: 120px; border: 2px solid #e5e7eb; border-radius: 8px; padding: 10px;
+    font-size: 12px; font-family: monospace; resize: none; margin-bottom: 12px;
+  }
+  .modal-btns { display: flex; gap: 10px; }
+  .modal-btns button { flex: 1; padding: 10px; border-radius: 8px; font-weight: 700; font-size: 14px; }
+  .btn-cancel { background: #f3f4f6; color: #4b5563; }
+  .btn-confirm { background: #f97316; color: #fff; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="toast-container" id="toastContainer"></div>
+  <div class="storage-warn" id="storageWarn">⚠️ 当前浏览器禁用了本地存储，记录只保存在本次会话中，刷新后会丢失。</div>
+
+  <header>
+    <div>
+      <div class="brand">
+        <div class="brand-box">FIT</div>
+        <span>健身打卡</span>
+      </div>
+      <div class="date" id="todayText"></div>
+    </div>
+    <div class="clock">
+      <div class="big" id="clockTime">--:--:--</div>
+      <div class="small" id="clockDate">----</div>
+    </div>
+  </header>
+
+  <div class="card">
+    <div class="goal-row">
+      <span>今日目标 <strong>30</strong> 分钟</span>
+      <span id="todayTotalText">已完成 0 分钟</span>
+    </div>
+    <div class="bar"><div class="bar-inner" id="goalBar"></div></div>
+    <div class="plan-hint" id="planHint"></div>
+  </div>
+
+  <div class="card">
+    <h2><span>本周训练计划</span> <span class="count">自动保存</span></h2>
+    <div class="plan-summary" id="planSummary"></div>
+    <div class="plan-grid" id="planGrid"></div>
+    <div class="plan-legend">
+      <span class="item"><span class="legend-badge train">练</span> 训练日</span>
+      <span class="item"><span class="legend-badge rest">休</span> 休息日</span>
+      <span class="item"><span class="legend-badge other">定</span> 自定义</span>
+      <span class="item"><span class="legend-badge none">空闲</span> 未设置</span>
+    </div>
+  </div>
+
+  <!-- 响应式网格：电脑端左右两列，手机端上下堆叠 -->
+  <div class="grid">
+    <!-- 打卡区 -->
+    <div class="card">
+      <h2>
+        <span>
+          <span class="icon-barbell"><i></i></span>
+          打卡 / 补录
+        </span>
+      </h2>
+      <div class="form-row">
+        <label>运动类型</label>
+        <select id="type">
+          <option>力量训练</option>
+          <option>跑步</option>
+          <option>游泳</option>
+          <option>骑行</option>
+          <option>瑜伽</option>
+          <option>球类运动</option>
+          <option>其他</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>日期</label>
+        <input id="recDate" type="date">
+      </div>
+      
+      <div class="two">
+        <div class="form-row">
+          <label>时长（分钟）</label>
+          <div class="quick-minutes" id="quickMinutes">
+            <button type="button" class="btn-quick" data-min="30">30</button>
+            <button type="button" class="btn-quick" data-min="60">60</button>
+            <button type="button" class="btn-quick" data-min="90">90</button>
+          </div>
+          <input id="minutes" type="number" min="1" placeholder="或手动输入">
+        </div>
+        <div class="form-row">
+          <label>备注（可选）</label>
+          <input id="note" type="text" placeholder="例如 晨跑">
+        </div>
+      </div>
+      <button class="btn-primary" id="checkinBtn" type="button">确认打卡 / CHECK IN</button>
+    </div>
+
+    <!-- 记录区 -->
+    <div class="card">
+      <h2>
+        <span>今日记录</span>
+        <div class="sync-btns">
+          <button class="btn-sync" id="copyBtn" type="button">复制备份</button>
+          <button class="btn-sync" id="pasteBtn" type="button">同步数据</button>
+        </div>
+      </h2>
+      <div id="todayList"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span>数据仪表盘</span></h2>
+    <div class="stats">
+      <div class="stat"><div class="num" id="statDays">0</div><div class="label">总天数</div></div>
+      <div class="stat"><div class="num" id="statStreak">0</div><div class="label">连续天数</div></div>
+      <div class="stat"><div class="num" id="statTotal">0</div><div class="label">总时长(分)</div></div>
+      <div class="stat"><div class="num" id="statWeek">0</div><div class="label">本周时长(分)</div></div>
+      <div class="stat"><div class="num time" id="statLast">—</div><div class="label">最近打卡</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span>全部训练日志</span> <span class="count" id="historyCount"></span></h2>
+    <div id="historyList"></div>
+  </div>
+</div>
+
+<!-- 同步数据弹窗 -->
+<div class="modal-overlay" id="syncModal">
+  <div class="modal-content">
+    <h3 id="modalTitle">复制/粘贴数据</h3>
+    <textarea id="syncTextarea" placeholder="在此粘贴数据..."></textarea>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal()">取消</button>
+      <button class="btn-confirm" id="modalConfirmBtn">确认</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var GOAL = 30;
+  var KEY = 'fitnessRecords';
+  var PLAN_KEY = 'fitnessWeekPlan';
+  var WEEK = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+  var WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+
+  var PLAN_TYPES = {
+    train: { label: '训练日', short: '练' },
+    rest:  { label: '休息日', short: '休' },
+    other: { label: '自定义', short: '定' }
+  };
+  var TYPE_SHORT = { train: '练', rest: '休', other: '定', none: '空闲', '': '空闲' };
+
+  var memoryRecords = [];
+  var storageBroken = false;
+
+  window.onerror = function (msg, url, line) {
+    console.error('脚本错误：', msg, '行号：', line);
+    showToast('脚本出错：' + msg, 'danger');
+    return false;
+  };
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function fmtDate(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function fmtTime(d) { return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()); }
+
+  function weekdayOf(dateStr) {
+    var parts = String(dateStr).split('-');
+    if (parts.length !== 3) return '';
+    var d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    return WEEK[d.getDay()];
+  }
+
+  function todayStr() { return fmtDate(new Date()); }
+  function todayIdx() { return (new Date().getDay() + 6) % 7; }
+
+  function getDailyQuote() {
+    return "行动是打败焦虑最好的办法";
+  }
+
+  function recMeta(r) {
+    if (r.time) return '<span style="color:#f97316;font-weight:800;">[实时]</span> ' + r.date + ' ' + r.time;
+    return '<span style="color:#14b8a6;font-weight:800;">[补录]</span> ' + r.date + ' ' + weekdayOf(r.date);
+  }
+
+  function sortKey(r) { return r.date + ' ' + (r.time || '23:59:59'); }
+
+  function showToast(msg, type) {
+    var container = document.getElementById('toastContainer');
+    var toast = document.createElement('div');
+    toast.className = 'toast ' + (type || 'success');
+    toast.innerHTML = msg;
+    container.appendChild(toast);
+    setTimeout(function() {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(-20px)';
+      toast.style.transition = 'all 0.3s';
+      setTimeout(function() { toast.remove(); }, 300);
+    }, 2500);
+  }
+
+  function animateValue(id, target) {
+    var obj = document.getElementById(id);
+    if (!obj) return;
+    var start = Number(obj.textContent) || 0;
+    if (start === target) { obj.textContent = target; return; }
+    
+    var duration = 600;
+    var startTime = null;
+    
+    function step(timestamp) {
+      if (!startTime) startTime = timestamp;
+      var progress = Math.min((timestamp - startTime) / duration, 1);
+      var ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+      obj.textContent = Math.floor(start + (target - start) * ease);
+      if (progress < 1) {
+        window.requestAnimationFrame(step);
+      } else {
+        obj.textContent = target;
+      }
+    }
+    window.requestAnimationFrame(step);
+  }
+
+  document.querySelectorAll('.btn-quick').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.btn-quick').forEach(function(b) { b.classList.remove('active'); });
+      this.classList.add('active');
+      document.getElementById('minutes').value = this.getAttribute('data-min');
+    });
+  });
+  document.getElementById('minutes').addEventListener('input', function() {
+    document.querySelectorAll('.btn-quick').forEach(function(b) { b.classList.remove('active'); });
+  });
+
+  function tickClock() {
+    var now = new Date();
+    document.getElementById('clockTime').textContent = fmtTime(now);
+    document.getElementById('clockDate').textContent = fmtDate(now) + ' ' + WEEK[now.getDay()];
+    document.getElementById('todayText').textContent = '今天：' + fmtDate(now) + ' ' + WEEK[now.getDay()];
+  }
+  tickClock();
+  setInterval(tickClock, 1000);
+
+  function initFormDefaults() {
+    var dateEl = document.getElementById('recDate');
+    dateEl.value = todayStr();
+    dateEl.max = todayStr();
+  }
+  initFormDefaults();
+
+  function load() {
+    if (storageBroken) return memoryRecords.slice();
+    try {
+      var raw = localStorage.getItem(KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      storageBroken = true;
+      console.warn('读取 localStorage 失败，改用内存存储', e);
+      document.getElementById('storageWarn').style.display = 'block';
+      return memoryRecords.slice();
+    }
+  }
+
+  function save(records) {
+    memoryRecords = records.slice();
+    if (storageBroken) return;
+    try { localStorage.setItem(KEY, JSON.stringify(records)); }
+    catch (e) {
+      storageBroken = true;
+      console.warn('写入 localStorage 失败，改用内存存储', e);
+      document.getElementById('storageWarn').style.display = 'block';
+    }
+  }
+
+  function loadPlan() {
+    try { var raw = localStorage.getItem(PLAN_KEY); return raw ? JSON.parse(raw) : {}; }
+    catch (e) { return {}; }
+  }
+  function savePlan(plan) {
+    try { localStorage.setItem(PLAN_KEY, JSON.stringify(plan)); }
+    catch (e) { console.warn('周计划保存失败', e); }
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function computeStreak(dates) {
+    if (!dates.length) return 0;
+    var set = {};
+    dates.forEach(function (d) { set[d] = true; });
+    var d = new Date();
+    var t = fmtDate(d);
+    if (!set[t]) {
+      d.setDate(d.getDate() - 1);
+      t = fmtDate(d);
+      if (!set[t]) return 0;
+    }
+    var n = 0;
+    while (set[t]) { n++; d.setDate(d.getDate() - 1); t = fmtDate(d); }
+    return n;
+  }
+
+  function renderPlanSummary() {
+    var counts = { train: 0, rest: 0, other: 0, none: 0 };
+    document.querySelectorAll('.plan-day').forEach(function(card) {
+      var type = card.getAttribute('data-type') || 'none';
+      if (!counts[type]) counts[type] = 0;
+      counts[type]++;
+    });
+
+    var html = [];
+    if (counts.train) html.push('<span class="pill"><span class="legend-badge train">练</span> 训练 <b>' + counts.train + '</b> 天</span>');
+    if (counts.rest)  html.push('<span class="pill"><span class="legend-badge rest">休</span> 休息 <b>' + counts.rest + '</b> 天</span>');
+    if (counts.other) html.push('<span class="pill"><span class="legend-badge other">定</span> 自定义 <b>' + counts.other + '</b> 天</span>');
+    if (counts.none)  html.push('<span class="pill"><span class="legend-badge none">空闲</span> 未设置 <b>' + counts.none + '</b> 天</span>');
+    
+    document.getElementById('planSummary').innerHTML = html.join('');
+  }
+
+  function initPlanGrid() {
+    var plan = loadPlan();
+    var ti = todayIdx();
+    var grid = document.getElementById('planGrid');
+
+    grid.innerHTML = WEEKDAYS.map(function (name, i) {
+      var item = plan[i] || { type: '', note: '' };
+      var type = item.type || 'none';
+      var isToday = i === ti;
+      var short = TYPE_SHORT[type] || '空闲';
+
+      var opts = ['<option value="">未设置</option>'];
+      Object.keys(PLAN_TYPES).forEach(function (k) {
+        opts.push('<option value="' + k + '"' + (item.type === k ? ' selected' : '') + '>' + PLAN_TYPES[k].label + '</option>');
+      });
+
+      return '<div class="plan-day' + (isToday ? ' today' : '') + '" data-type="' + type + '">' +
+        '<div class="badge">' + short + '</div>' +
+        '<div class="dow">' +
+          '<span>' + name + '</span>' +
+          (isToday ? '<span class="today-tag">今天</span>' : '') +
+        '</div>' +
+        '<select class="plan-type" data-day="' + i + '">' + opts.join('') + '</select>' +
+        '<input class="note-input" data-day="' + i + '" type="text" placeholder="备注" value="' + escapeHtml(item.note || '') + '">' +
+      '</div>';
+    }).join('');
+  }
+
+  function updatePlanHint() {
+    var todayCard = document.querySelectorAll('.plan-day')[todayIdx()];
+    if (!todayCard) return;
+    
+    var type = todayCard.getAttribute('data-type');
+    var noteVal = todayCard.querySelector('.note-input').value;
+    var hint = document.getElementById('planHint');
+    hint.className = 'plan-hint';
+
+    if (!type || type === 'none') { 
+      hint.style.display = 'none'; 
+      return; 
+    }
+
+    var recs = load().filter(function (r) { return r.date === todayStr(); });
+    var total = recs.reduce(function (s, r) { return s + Number(r.minutes); }, 0);
+    var note = noteVal ? '（' + escapeHtml(noteVal) + '）' : '';
+    hint.style.display = 'block';
+
+    if (type === 'rest') {
+      hint.classList.add('type-rest');
+      hint.innerHTML = '<b>[休息日]</b> 今天是计划中的休息日' + note + '，好好恢复。';
+    } else if (type === 'train') {
+      hint.classList.add('type-train');
+      if (total > 0) {
+        hint.innerHTML = '<b>[训练日]</b> 今天是训练日' + note + '，已完成 <b>' + total + ' 分钟</b>，继续加油！';
+      } else {
+        hint.innerHTML = '<b>[训练日]</b> 今天是训练日' + note + '，还没有打卡哦，动起来！';
+      }
+    } else {
+      hint.classList.add('type-other');
+      hint.innerHTML = '<b>[自定义]</b> 今天计划：<b>' + (noteVal ? escapeHtml(noteVal) : '待定') + '</b>' +
+        (total > 0 ? '，已完成 ' + total + ' 分钟。' : '。');
+    }
+  }
+
+  function render() {
+    try {
+      var records = load();
+      var today = todayStr();
+      var todayRecs = records.filter(function (r) { return r.date === today; })
+        .sort(function (a, b) { return sortKey(a).localeCompare(sortKey(b)); });
+      var todayTotal = todayRecs.reduce(function (s, r) { return s + Number(r.minutes); }, 0);
+
+      document.getElementById('todayTotalText').textContent = '已完成 ' + todayTotal + ' 分钟';
+      document.getElementById('goalBar').style.width = Math.min(100, todayTotal / GOAL * 100) + '%';
+
+      var todayList = document.getElementById('todayList');
+      var quoteHtml = `<div class="motivational-quote">“${getDailyQuote()}”<i>DAILY MOTIVATION</i></div>`;
+
+      if (!todayRecs.length) {
+        todayList.innerHTML = `
+          <div class="empty-workout">
+            <div class="dumbbell-icon"></div>
+            <div class="empty-title">今天还没有训练记录</div>
+            <div class="empty-sub">NO PAIN, NO GAIN</div>
+            ${quoteHtml}
+          </div>
+        `;
+      } else {
+        var recordsHtml = todayRecs.map(function (r) {
+          return '<div class="record"><div>' +
+            '<div><strong>' + escapeHtml(r.type) + '</strong> · <span class="mins">' + r.minutes + ' 分钟</span></div>' +
+            '<div class="meta">' + recMeta(r) + (r.note ? ' · ' + escapeHtml(r.note) : '') + '</div>' +
+            '</div><button class="btn-del" type="button" data-id="' + r.id + '">删除</button></div>';
+        }).join('');
+        todayList.innerHTML = recordsHtml + quoteHtml;
+      }
+
+      var dates = [];
+      var seen = {};
+      records.forEach(function (r) { if (r.date && !seen[r.date]) { seen[r.date] = true; dates.push(r.date); } });
+      var total = records.reduce(function (s, r) { return s + Number(r.minutes); }, 0);
+      var now = new Date();
+      var weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+      weekStart.setHours(0, 0, 0, 0);
+      var weekTotal = records.filter(function (r) { return new Date(r.date + 'T00:00:00') >= weekStart; })
+        .reduce(function (s, r) { return s + Number(r.minutes); }, 0);
+
+      var lastRec = records.slice().sort(function (a, b) { return sortKey(b).localeCompare(sortKey(a)); })[0];
+
+      animateValue('statDays', dates.length);
+      animateValue('statStreak', computeStreak(dates));
+      animateValue('statTotal', total);
+      animateValue('statWeek', weekTotal);
+      document.getElementById('statLast').textContent = lastRec ? (lastRec.time ? lastRec.date + ' ' + lastRec.time : lastRec.date) : '—';
+
+      var grouped = {};
+      records.forEach(function (r) { (grouped[r.date] = grouped[r.date] || []).push(r); });
+      var days = Object.keys(grouped).sort().reverse();
+      document.getElementById('historyCount').textContent =
+        days.length ? '共 ' + days.length + ' 天 / ' + records.length + ' 条' : '';
+
+      var historyList = document.getElementById('historyList');
+      if (!days.length) {
+        historyList.innerHTML = '<div class="empty" style="text-align:center; color:#9ca3af; padding:20px;">暂无历史记录</div>';
+      } else {
+        historyList.innerHTML = days.map(function (d) {
+          var list = grouped[d].sort(function (a, b) { return sortKey(a).localeCompare(sortKey(b)); });
+          var sum = list.reduce(function (s, r) { return s + Number(r.minutes); }, 0);
+          return '<div class="history-day">' +
+            '<div class="history-title">' + d + ' ' + weekdayOf(d) + ' <span class="time-sum">· 共 ' + sum + ' 分钟</span></div>' +
+            list.map(function (r) {
+              var meta = r.time ? '<span style="color:#f97316;font-weight:800;">[实时]</span> ' + r.time : '<span style="color:#14b8a6;font-weight:800;">[补录]</span>';
+              return '<div class="record"><div>' +
+                '<div><strong>' + escapeHtml(r.type) + '</strong> · ' + r.minutes + ' 分钟</div>' +
+                '<div class="meta">' + meta + (r.note ? ' · ' + escapeHtml(r.note) : '') + '</div>' +
+                '</div><button class="btn-del" type="button" data-id="' + r.id + '">删除</button></div>';
+            }).join('') + '</div>';
+        }).join('');
+      }
+
+      updatePlanHint();
+    } catch (e) {
+      console.error('渲染失败', e);
+      showToast('页面渲染出错：' + e.message, 'danger');
+    }
+  }
+
+  function addRecord() {
+    try {
+      var typeEl = document.getElementById('type');
+      var dateEl = document.getElementById('recDate');
+      var minutesEl = document.getElementById('minutes');
+      var noteEl = document.getElementById('note');
+
+      var dateVal = dateEl.value;
+      var type = typeEl.value;
+      var minutes = Number(minutesEl.value);
+      var note = noteEl.value.trim();
+
+      if (!dateVal) { dateEl.focus(); return showToast('请选择日期', 'danger'); }
+      if (dateVal > todayStr()) { dateEl.focus(); return showToast('不能选择未来的日期', 'danger'); }
+      if (!minutes || minutes <= 0) { minutesEl.focus(); return showToast('请输入有效的运动时长', 'danger'); }
+
+      var now = new Date();
+      var isToday = dateVal === todayStr();
+      var record = {
+        id: String(now.getTime()) + Math.random().toString(16).slice(2),
+        date: dateVal, type: type, minutes: Math.round(minutes), note: note
+      };
+
+      if (isToday) { record.time = fmtTime(now); record.timestamp = now.getTime(); }
+      else { record.time = ''; record.timestamp = new Date(dateVal + 'T00:00:00').getTime(); }
+
+      var records = load();
+      records.push(record);
+      save(records);
+
+      minutesEl.value = ''; noteEl.value = '';
+      document.querySelectorAll('.btn-quick').forEach(function(b) { b.classList.remove('active'); });
+      initFormDefaults();
+
+      render();
+      showToast('✅ ' + (isToday ? '打卡成功' : '补录成功'), 'success');
+    } catch (e) {
+      console.error('打卡失败', e);
+      showToast('打卡失败：' + e.message, 'danger');
+    }
+  }
+
+  function handleDeleteClick(e) {
+    var btn = e.target.closest('.btn-del');
+    if (!btn) return;
+    var id = btn.dataset.id;
+    var recordEl = btn.closest('.record');
+    
+    if (recordEl) {
+      recordEl.classList.add('is-deleting');
+      setTimeout(function() {
+        var records = load().filter(function (r) { return r.id !== id; });
+        save(records);
+        render();
+        showToast('记录已删除', 'success');
+      }, 300);
+    } else {
+      var records = load().filter(function (r) { return r.id !== id; });
+      save(records);
+      render();
+    }
+  }
+
+  document.getElementById('checkinBtn').addEventListener('click', addRecord);
+  document.getElementById('todayList').addEventListener('click', handleDeleteClick);
+  document.getElementById('historyList').addEventListener('click', handleDeleteClick);
+
+  document.getElementById('planGrid').addEventListener('change', function (e) {
+    var t = e.target;
+    if (!t.classList.contains('plan-type')) return;
+    
+    var plan = loadPlan();
+    var day = t.dataset.day;
+    if (!plan[day]) plan[day] = { type: '', note: '' };
+    plan[day].type = t.value;
+    savePlan(plan);
+
+    var card = t.closest('.plan-day');
+    var type = t.value || 'none';
+    card.setAttribute('data-type', type);
+    card.querySelector('.badge').textContent = TYPE_SHORT[type] || '空闲'; 
+
+    renderPlanSummary();
+    updatePlanHint();
+  });
+
+  document.getElementById('planGrid').addEventListener('input', function (e) {
+    var t = e.target;
+    if (!t.classList.contains('note-input')) return;
+    
+    var plan = loadPlan();
+    var day = t.dataset.day;
+    if (!plan[day]) plan[day] = { type: '', note: '' };
+    plan[day].note = t.value;
+    savePlan(plan);
+    
+    updatePlanHint();
+  });
+
+  // ====== 复制 / 粘贴 同步数据 ======
+  var syncModal = document.getElementById('syncModal');
+  var syncTextarea = document.getElementById('syncTextarea');
+  var modalConfirmBtn = document.getElementById('modalConfirmBtn');
+  var currentSyncMode = 'copy';
+
+  window.closeModal = function() {
+    syncModal.style.display = 'none';
+  };
+
+  document.getElementById('copyBtn').addEventListener('click', function() {
+    var records = load();
+    var plan = loadPlan();
+    syncTextarea.value = JSON.stringify({ records: records, plan: plan });
+    document.getElementById('modalTitle').textContent = '复制这段数据保存到微信/备忘录';
+    modalConfirmBtn.textContent = '一键复制';
+    currentSyncMode = 'copy';
+    syncModal.style.display = 'flex';
+  });
+
+  document.getElementById('pasteBtn').addEventListener('click', function() {
+    syncTextarea.value = '';
+    document.getElementById('modalTitle').textContent = '粘贴之前备份的数据';
+    modalConfirmBtn.textContent = '解析并恢复';
+    currentSyncMode = 'paste';
+    syncModal.style.display = 'flex';
+  });
+
+  modalConfirmBtn.addEventListener('click', function() {
+    if (currentSyncMode === 'copy') {
+      syncTextarea.select();
+      document.execCommand('copy');
+      showToast('数据已复制，快发送到微信吧！', 'success');
+      closeModal();
+    } else {
+      var val = syncTextarea.value.trim();
+      if (!val) return showToast('请先粘贴数据', 'danger');
+      try {
+        var data = JSON.parse(val);
+        if (data.records && Array.isArray(data.records)) {
+          save(data.records);
+          if (data.plan) savePlan(data.plan);
+          initPlanGrid();
+          renderPlanSummary();
+          render();
+          showToast('✅ 数据同步成功！', 'success');
+          closeModal();
+        } else {
+          showToast('数据格式不正确', 'danger');
+        }
+      } catch(e) {
+        showToast('解析失败，请检查复制的内容', 'danger');
+      }
+    }
+  });
+
+  // 自动补录逻辑
+  function autoImportData() {
+    try {
+      var IMPORT_FLAG = 'fitness_bulk_import_v1';
+      if (localStorage.getItem(IMPORT_FLAG)) return; 
+    } catch(e) {}
+
+    var mdList = [
+      "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-09", "2026-09-11", "2026-09-15", "2026-09-17", "2026-09-19", "2026-09-21", "2026-09-26", "2026-09-27",
+      "2026-10-06", "2026-10-07", "2026-10-11", "2026-10-13", "2026-10-15", "2026-10-17", "2026-10-18", "2026-10-20", "2026-10-22", "2026-10-24", "2026-10-25", "2026-10-27", "2026-10-29",
+      "2026-11-03", "2026-11-04"
+    ];
+    
+    var records = load();
+    
+    mdList.forEach(function(dateStr) {
+      var exists = records.some(function(r) {
+        return r.date === dateStr && r.type === '力量训练' && r.minutes === 60;
+      });
+      
+      if (!exists) {
+        records.push({
+          id: String(Date.now()) + Math.random().toString(16).slice(2),
+          date: dateStr, 
+          type: "力量训练", 
+          minutes: 60, 
+          note: "", 
+          time: "", 
+          timestamp: new Date(dateStr + "T00:00:00").getTime()
+        });
+      }
+    });
+    
+    save(records);
+    try {
+      localStorage.setItem(IMPORT_FLAG, 'true');
+    } catch(e) {}
+  }
+
+  autoImportData(); 
+  initPlanGrid();
+  renderPlanSummary();
+  render();
+})();
+</script>
+</body>
+</html>
